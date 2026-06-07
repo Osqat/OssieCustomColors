@@ -1,0 +1,10 @@
+obj/
+plugins/
+bin/
+.vs/
+*.user.props
+*.user
+
+# Dev-only calibration code — not shipped to the public repo.
+# CalibrationTools.cs lives only on your machine and is never committed.
+CalibrationTools.cs
