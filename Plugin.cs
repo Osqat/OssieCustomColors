@@ -49,7 +49,7 @@ namespace OssieCustomColors
             DontDestroyOnLoad(go);
             go.AddComponent<ColorPickerUI>();
 
-            CursorOverlay.DebugLogging = true;
+            CursorOverlay.DebugLogging = false;
             CursorOverlay.EnsureHost();
 
             new Harmony("com.osqat.customcolors").PatchAll();

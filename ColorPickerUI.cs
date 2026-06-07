@@ -33,10 +33,8 @@ namespace OssieCustomColors
         float _lastHueForSvTex = -1f;
         bool _svDragging, _hueDragging;
 
-        // Calibration support — populated by CalibrationTools.cs at dev time; empty/false in release builds.
+        // Runtime color mapping state. CalibrationTools.cs can populate this when explicitly built elsewhere.
         readonly Dictionary<string, Color> _calibratedBackendColors = new Dictionary<string, Color>();
-        bool _calibrationMode;
-        bool _autoCalibrationRunning;
         Color _lastDisplayColor = Color.white;
         Color _lastBackendColor = Color.white;
         string _lastDisplayHex = "";
@@ -139,7 +137,7 @@ namespace OssieCustomColors
 
             SyncNativesToMode();
 
-            bool uiVisible = colorsTabActive || _open || _calibrationMode || _autoCalibrationRunning;
+            bool uiVisible = colorsTabActive || _open;
             if (uiVisible) CursorOverlay.Request();
 
             CheckCalibrationInput();

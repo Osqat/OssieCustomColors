@@ -17,6 +17,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="CalibrationTools.cs" />
     <PackageReference Include="Krafs.Publicizer" Version="1.0.1" />
     <ProjectReference Include="..\Cinnamon\Cinnamon.csproj" />
     <Reference Include="Assembly-CSharp" Private="false">
