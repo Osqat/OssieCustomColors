@@ -23,8 +23,15 @@ namespace OssieCustomColors
         bool _bookOpen;
         InventoryBook _inventoryBookCache;
         float _r, _g, _b;
+        float _h, _s, _v;
         string _hexInput = "FFFFFF";
         bool _loggedColorSpace;
+
+        // HSV picker textures
+        Texture2D _svTex;
+        Texture2D _hueTex;
+        float _lastHueForSvTex = -1f;
+        bool _svDragging, _hueDragging;
 
         // Calibration support — populated by CalibrationTools.cs at dev time; empty/false in release builds.
         readonly Dictionary<string, Color> _calibratedBackendColors = new Dictionary<string, Color>();
@@ -67,6 +74,8 @@ namespace OssieCustomColors
         void OnDestroy()
         {
             if (Instance == this) Instance = null;
+            if (_svTex  != null) Destroy(_svTex);
+            if (_hueTex != null) Destroy(_hueTex);
         }
 
         static bool IsFreeplay()
@@ -118,6 +127,9 @@ namespace OssieCustomColors
             }
             _wasFreeplayLastFrame = true;
 
+            if (_open && Input.GetKeyDown(KeyCode.Escape))
+                _open = false;
+
             bool colorsTabActive = _layoutReady
                                   && _allColorBtns != null
                                   && _allColorBtns.Length > 0
@@ -152,6 +164,8 @@ namespace OssieCustomColors
         public void Open(Color current)
         {
             _r = current.r; _g = current.g; _b = current.b;
+            Color.RGBToHSV(current, out _h, out _s, out _v);
+            _lastHueForSvTex = -1f;
             _hexInput = ToHex(_r, _g, _b);
             _open = true;
         }
@@ -393,7 +407,7 @@ namespace OssieCustomColors
 
                 if (e.type == EventType.MouseDown && hovered)
                 {
-                    Open(Color.white);
+                    Open(_lastDisplayColor);
                     e.Use();
                 }
 
@@ -408,71 +422,159 @@ namespace OssieCustomColors
             EnsureStyles();
             if (!_stylesReady) return;
 
-            float pw = 360f, ph = 330f;
+            const float pad     = 18f;
+            const float svSz    = 260f;
+            const float hueSz   = 18f;
+            const float titleH  = 28f;
+            const float hexH    = 28f;
+            const float swatchH = 28f;
+            const float btnsH   = 42f;
+            const float pw      = 360f;
+            float innerW = pw - pad * 2f;           // 324
+            float svX    = (innerW - svSz) / 2f;   // 32px centering margin each side
+
+            float ph = pad + titleH + 12f + svSz + 8f + hueSz + 10f + hexH + 8f + swatchH + 12f + btnsH + pad;
+
             float px = (Screen.width  - pw) * 0.5f;
             float py = (Screen.height - ph) * 0.5f;
+            float ix = px + pad;
+            float cy = py + pad;
 
             GUI.DrawTexture(new Rect(px, py, pw, ph), _texPanel);
-            GUILayout.BeginArea(new Rect(px + 18f, py + 18f, pw - 36f, ph - 36f));
 
-            GUILayout.Label("CUSTOM COLOR", _titleStyle);
-            GUILayout.Space(8f);
+            var e = Event.current;
 
-            float newR = SliderRow("R", _r, new Color(1f, 0.35f, 0.35f));
-            float newG = SliderRow("G", _g, new Color(0.35f, 1f, 0.35f));
-            float newB = SliderRow("B", _b, new Color(0.35f, 0.55f, 1f));
+            // Title
+            GUI.Label(new Rect(ix, cy, innerW, titleH), "CUSTOM COLOR", _titleStyle);
+            cy += titleH + 12f;
 
-            bool changed = newR != _r || newG != _g || newB != _b;
-            _r = newR; _g = newG; _b = newB;
-            if (changed) _hexInput = ToHex(_r, _g, _b);
+            // SV box
+            RebuildSvTexIfNeeded();
+            var svRect = new Rect(ix + svX, cy, svSz, svSz);
+            GUI.DrawTexture(svRect, _svTex);
 
-            GUILayout.Space(6f);
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("#", _labelStyle, GUILayout.Width(18f));
-            string entered = GUILayout.TextField(_hexInput, 6, _fieldStyle);
-            GUILayout.EndHorizontal();
+            if (e.type == EventType.Repaint)
+            {
+                float cx2 = svRect.x + _s * svRect.width;
+                float cy2 = svRect.y + (1f - _v) * svRect.height;
+                var prev = GUI.color;
+                GUI.color = Color.black;
+                GUI.DrawTexture(new Rect(cx2 - 6, cy2 - 6, 12, 12), _texWhite);
+                GUI.color = Color.white;
+                GUI.DrawTexture(new Rect(cx2 - 4, cy2 - 4,  8,  8), _texWhite);
+                GUI.color = prev;
+            }
 
+            if (e.type == EventType.MouseDown && svRect.Contains(e.mousePosition)) _svDragging = true;
+            if (e.type == EventType.MouseUp) _svDragging = false;
+            if (_svDragging && (e.type == EventType.MouseDrag || e.type == EventType.MouseDown))
+            {
+                _s = Mathf.Clamp01((e.mousePosition.x - svRect.x) / svRect.width);
+                _v = Mathf.Clamp01(1f - (e.mousePosition.y - svRect.y) / svRect.height);
+                UpdateRgbFromHsv();
+                e.Use();
+            }
+            cy += svSz + 8f;
+
+            // Hue strip
+            var hueRect = new Rect(ix + svX, cy, svSz, hueSz);
+            GUI.DrawTexture(hueRect, EnsureHueTex());
+
+            if (e.type == EventType.Repaint)
+            {
+                float hx = hueRect.x + _h * hueRect.width;
+                var prev = GUI.color;
+                GUI.color = Color.black;
+                GUI.DrawTexture(new Rect(hx - 2, hueRect.y - 1, 4, hueRect.height + 2), _texWhite);
+                GUI.color = Color.white;
+                GUI.DrawTexture(new Rect(hx - 1, hueRect.y - 1, 2, hueRect.height + 2), _texWhite);
+                GUI.color = prev;
+            }
+
+            if (e.type == EventType.MouseDown && hueRect.Contains(e.mousePosition)) _hueDragging = true;
+            if (e.type == EventType.MouseUp) _hueDragging = false;
+            if (_hueDragging && (e.type == EventType.MouseDrag || e.type == EventType.MouseDown))
+            {
+                _h = Mathf.Clamp01((e.mousePosition.x - hueRect.x) / hueRect.width);
+                _lastHueForSvTex = -1f;
+                UpdateRgbFromHsv();
+                e.Use();
+            }
+            cy += hueSz + 10f;
+
+            // Hex input
+            GUI.Label(new Rect(ix, cy, 20f, hexH), "#", _labelStyle);
+            string entered = GUI.TextField(new Rect(ix + 24f, cy, innerW - 24f, hexH), _hexInput, 6, _fieldStyle);
             if (entered != _hexInput)
             {
                 _hexInput = entered;
                 if (ColorUtility.TryParseHtmlString("#" + entered, out Color parsed))
-                    { _r = parsed.r; _g = parsed.g; _b = parsed.b; }
+                {
+                    _r = parsed.r; _g = parsed.g; _b = parsed.b;
+                    Color.RGBToHSV(parsed, out _h, out _s, out _v);
+                    _lastHueForSvTex = -1f;
+                }
             }
+            cy += hexH + 8f;
 
-            GUILayout.Space(8f);
+            // Color swatch
             RefreshSwatch();
-            GUILayout.Box(GUIContent.none, GUIStyle.none, GUILayout.Height(28f), GUILayout.ExpandWidth(true));
-            if (Event.current.type == EventType.Repaint)
-                GUI.DrawTexture(GUILayoutUtility.GetLastRect(), _texSwatch);
+            GUI.DrawTexture(new Rect(ix, cy, innerW, swatchH), _texSwatch);
+            cy += swatchH + 12f;
 
-            GUILayout.Space(10f);
-            GUILayout.BeginHorizontal();
-            GUILayout.FlexibleSpace();
-            if (GUILayout.Button("Use Color",  _actionBtnStyle, GUILayout.Height(42f), GUILayout.Width(100f))) UseColor();
-            GUILayout.Space(6f);
-            if (GUILayout.Button("Save Color", _actionBtnStyle, GUILayout.Height(42f), GUILayout.Width(100f))) SaveColor();
-            GUILayout.Space(6f);
-            if (GUILayout.Button("Cancel",     _actionBtnStyle, GUILayout.Height(42f), GUILayout.Width(80f)))  _open = false;
-            GUILayout.FlexibleSpace();
-            GUILayout.EndHorizontal();
+            // Buttons
+            float totalBtnsW = 100f + 6f + 100f + 6f + 80f;
+            float bx = ix + (innerW - totalBtnsW) / 2f;
+            if (GUI.Button(new Rect(bx,        cy, 100f, btnsH), "Use Color",  _actionBtnStyle)) UseColor();
+            if (GUI.Button(new Rect(bx + 106f, cy, 100f, btnsH), "Save Color", _actionBtnStyle)) SaveColor();
+            if (GUI.Button(new Rect(bx + 212f, cy,  80f, btnsH), "Cancel",     _actionBtnStyle)) _open = false;
 
-            GUILayout.EndArea();
-
-            if (Event.current.isMouse && Event.current.type != EventType.Used)
-                Event.current.Use();
+            if (e.isMouse && e.type != EventType.Used)
+                e.Use();
         }
 
-        float SliderRow(string label, float value, Color tint)
+        // ---- HSV helpers ----
+
+        void UpdateRgbFromHsv()
         {
-            GUILayout.BeginHorizontal();
-            var ls = new GUIStyle(_labelStyle) { fixedWidth = 16f };
-            ls.normal.textColor = tint;
-            GUILayout.Label(label, ls);
-            float v = GUILayout.HorizontalSlider(value, 0f, 1f);
-            var ns = new GUIStyle(_labelStyle) { fixedWidth = 32f, alignment = TextAnchor.MiddleRight };
-            GUILayout.Label(Mathf.RoundToInt(v * 255f).ToString(), ns);
-            GUILayout.EndHorizontal();
-            return v;
+            var c = Color.HSVToRGB(_h, _s, _v);
+            _r = c.r; _g = c.g; _b = c.b;
+            _hexInput = ToHex(_r, _g, _b);
+        }
+
+        void RebuildSvTexIfNeeded()
+        {
+            if (_svTex != null && Mathf.Abs(_lastHueForSvTex - _h) < 0.002f) return;
+            _lastHueForSvTex = _h;
+            if (_svTex == null)
+            {
+                _svTex = new Texture2D(64, 64, TextureFormat.RGB24, false);
+                _svTex.hideFlags  = HideFlags.HideAndDontSave;
+                _svTex.filterMode = FilterMode.Bilinear;
+                _svTex.wrapMode   = TextureWrapMode.Clamp;
+            }
+            var px = new Color[64 * 64];
+            for (int y = 0; y < 64; y++)
+            for (int x = 0; x < 64; x++)
+                px[y * 64 + x] = Color.HSVToRGB(_h, x / 63f, y / 63f);
+            _svTex.SetPixels(px);
+            _svTex.Apply();
+        }
+
+        Texture2D EnsureHueTex()
+        {
+            if (_hueTex != null) return _hueTex;
+            _hueTex = new Texture2D(256, 16, TextureFormat.RGB24, false);
+            _hueTex.hideFlags  = HideFlags.HideAndDontSave;
+            _hueTex.filterMode = FilterMode.Bilinear;
+            _hueTex.wrapMode   = TextureWrapMode.Clamp;
+            var px = new Color[256 * 16];
+            for (int y = 0; y < 16; y++)
+            for (int x = 0; x < 256; x++)
+                px[y * 256 + x] = Color.HSVToRGB(x / 255f, 1f, 1f);
+            _hueTex.SetPixels(px);
+            _hueTex.Apply();
+            return _hueTex;
         }
 
         void UseColor()
