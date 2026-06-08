@@ -1,6 +1,9 @@
 obj/
 plugins/
 bin/
+dist/
+Package-Thunderstore.ps1
+thunderstore/
 .vs/
 *.user.props
 *.user
