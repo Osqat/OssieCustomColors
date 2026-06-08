@@ -1,16 +1,15 @@
 using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
-using Cinnamon.UI;
 using HarmonyLib;
 using UnityEngine;
 
-[assembly: System.Reflection.AssemblyVersion("1.0.0")]
+[assembly: System.Reflection.AssemblyVersion("1.1.0")]
 [assembly: Cinnamon.AutoUpdate("Osqat/OssieCustomColors")]
 
 namespace OssieCustomColors
 {
-    [BepInPlugin("com.osqat.customcolors", "OssieCustomColors", "1.0.0")]
+    [BepInPlugin("com.osqat.customcolors", "OssieCustomColors", "1.1.0")]
     [BepInDependency("com.osqat.cinnamon", BepInDependency.DependencyFlags.HardDependency)]
     public partial class Plugin : BaseUnityPlugin
     {
@@ -48,9 +47,6 @@ namespace OssieCustomColors
             var go = new GameObject("OssieCustomColors");
             DontDestroyOnLoad(go);
             go.AddComponent<ColorPickerUI>();
-
-            CursorOverlay.DebugLogging = false;
-            CursorOverlay.EnsureHost();
 
             new Harmony("com.osqat.customcolors").PatchAll();
             Log.LogInfo("[OssieCustomColors] loaded.");

@@ -38,6 +38,9 @@
     <Reference Include="UnityEngine.UI" Private="false">
       <HintPath>$(UCHfolder)\UltimateChickenHorse_Data\Managed\UnityEngine.UI.dll</HintPath>
     </Reference>
+    <Reference Include="UnityEngine.UIModule" Private="false">
+      <HintPath>$(UCHfolder)\UltimateChickenHorse_Data\Managed\UnityEngine.UIModule.dll</HintPath>
+    </Reference>
     <Reference Include="UnityEngine.IMGUIModule" Private="false">
       <HintPath>$(UCHfolder)\UltimateChickenHorse_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath>
     </Reference>
